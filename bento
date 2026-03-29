@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# ── bento — launcher for the bento IDE zellij session ─────────────
+# Checks dependencies, sources config, and starts (or attaches to)
+# the bento zellij session.
+set -euo pipefail
+
+BENTO_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ── Source config ─────────────────────────────────────────────────
+BENTO_CONF="${BENTO_DIR}/bento.conf"
+if [ -f "$BENTO_CONF" ]; then
+    # shellcheck source=bento.conf
+    . "$BENTO_CONF"
+fi
+
+# Allow ~/.config/bento/bento.conf overrides
+USER_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/bento/bento.conf"
+if [ -f "$USER_CONF" ]; then
+    . "$USER_CONF"
+fi
+
+# ── Defaults ──────────────────────────────────────────────────────
+BENTO_SESSION="${BENTO_SESSION:-bento}"
+BENTO_MIN_COLS="${BENTO_MIN_COLS:-100}"
+BENTO_THEME="${BENTO_THEME:-moonfly}"
+
+# ── Export config for widget scripts ──────────────────────────────
+export BENTO_REMOTE_HOST="${BENTO_REMOTE_HOST:-}"
+export BENTO_REMOTE_PORT="${BENTO_REMOTE_PORT:-61208}"
+export BENTO_REMOTE_LABEL="${BENTO_REMOTE_LABEL:-}"
+export BENTO_REMOTE_USER="${BENTO_REMOTE_USER:-}"
+export BENTO_REMOTE_API="${BENTO_REMOTE_API:-}"
+export BENTO_SMON_INTERVAL="${BENTO_SMON_INTERVAL:-3}"
+export BENTO_BMON_INTERVAL="${BENTO_BMON_INTERVAL:-2}"
+export BENTO_BGIT_INTERVAL="${BENTO_BGIT_INTERVAL:-3}"
+export BENTO_CAVA_BIN="${BENTO_CAVA_BIN:-cava}"
+export BENTO_EDITOR="${BENTO_EDITOR:-micro}"
+
+# Build remote API URL if not explicitly set
+if [ -z "$BENTO_REMOTE_API" ] && [ -n "$BENTO_REMOTE_HOST" ]; then
+    export BENTO_REMOTE_API="http://${BENTO_REMOTE_HOST}:${BENTO_REMOTE_PORT}/api/4"
+fi
+
+# ── Dependency check ──────────────────────────────────────────────
+MISSING=()
+for cmd in zellij yazi micro python3 git; do
+    if ! command -v "$cmd" &>/dev/null; then
+        MISSING+=("$cmd")
+    fi
+done
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "bento: missing dependencies: ${MISSING[*]}"
+    echo ""
+    echo "Install them first.  On Arch/Hyprland:"
+    echo "  sudo pacman -S zellij yazi micro python git"
+    echo ""
+    echo "cava (optional, for audio visualizer):"
+    echo "  sudo pacman -S cava"
+    exit 1
+fi
+
+# ── Terminal width check ──────────────────────────────────────────
+COLS=$(tput cols 2>/dev/null || echo 120)
+if [ "$COLS" -lt "$BENTO_MIN_COLS" ]; then
+    echo "bento: terminal is ${COLS} columns wide (minimum: ${BENTO_MIN_COLS})"
+    echo "       resize your terminal or reduce BENTO_MIN_COLS in bento.conf"
+    echo ""
+    read -rp "launch anyway? [y/N] " yn
+    case "$yn" in [yY]*) ;; *) exit 0 ;; esac
+fi
+
+# ── Ensure widget scripts are in PATH ─────────────────────────────
+export PATH="${BENTO_DIR}/widgets:${PATH}"
+
+# ── Zellij config ─────────────────────────────────────────────────
+ZELLIJ_CONFIG_DIR="${BENTO_DIR}/config"
+LAYOUT="${BENTO_DIR}/layouts/bento.kdl"
+
+# Point zellij at our config + theme directory
+export ZELLIJ_CONFIG_FILE="${ZELLIJ_CONFIG_DIR}/zellij.kdl"
+
+# ── Launch ────────────────────────────────────────────────────────
+exec zellij attach "$BENTO_SESSION" --create-layout "$LAYOUT"

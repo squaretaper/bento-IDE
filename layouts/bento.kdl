@@ -1,0 +1,47 @@
+// bento IDE layout — 3-column terminal workspace
+//
+// ┌─────────────┬──────────────────────┬──────────────────┐
+// │ yazi         │ editor         (36%) │ bmon       (44%) │
+// │ file browser │──────────────────────│ smon       (24%) │
+// │ (28 cols)    │ shell          (63%) │ bgit       (20%) │
+// │              │                      │ bcava      (12%) │
+// │              │      (fluid)         │ (34 cols)        │
+// ├──────────────┴──────────────────────┴──────────────────┤
+// │ compact-bar                                            │
+// └────────────────────────────────────────────────────────┘
+//
+// Left and right columns are fixed-width so widgets render
+// correctly at any terminal size.  The center column absorbs
+// all remaining space — it holds the editor and shell.
+
+layout {
+    pane split_direction="vertical" {
+        pane size=28 name="yazi" {
+            command "yazi-pick"
+        }
+        pane split_direction="horizontal" {
+            pane size="36%" {
+                command "micro"
+            }
+            pane size="63%" name="zsh"
+        }
+        pane split_direction="horizontal" size=34 {
+            pane size="44%" {
+                command "bmon"
+            }
+            pane size="24%" {
+                command "smon"
+            }
+            pane size="20%" {
+                command "bgit"
+            }
+            pane size="12%" {
+                name "cava"
+                command "bcava"
+            }
+        }
+    }
+    pane size=1 borderless=true {
+        plugin location="compact-bar"
+    }
+}

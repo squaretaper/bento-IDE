@@ -1,0 +1,22 @@
+[mgr]
+ratio = [0, 1, 0]
+show_hidden = true
+sort_by = "natural"
+sort_dir_first = true
+
+[preview]
+enabled = false
+
+[opener]
+edit = [
+  { run = 'yazi-open "$1"', orphan = true, for = "unix" },
+]
+
+[open]
+prepend_rules = [
+  { mime = "vfs/{absent,stale}", use = "edit" },
+  { mime = "text/*", use = "edit" },
+  { mime = "application/json", use = "edit" },
+  { mime = "application/*xml*", use = "edit" },
+  { mime = "application/javascript", use = "edit" },
+]

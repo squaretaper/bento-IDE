@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""bgit — compact git status widget for bento IDE.
+
+Watches /tmp/bento-cwd (written by yazi's cwd-sync plugin) and
+displays branch, status counts, and recent commits for the repo
+at that path.  Supports both local and remote (SSH/SFTP) repos.
+"""
+
+import subprocess, time, os, sys, shlex, re
+from urllib.parse import urlparse
+
+INTERVAL = int(os.environ.get('BENTO_BGIT_INTERVAL', '3'))
+
+BLUE   = '\033[38;2;128;160;255m'
+GREEN  = '\033[38;2;140;200;95m'
+RED    = '\033[38;2;255;84;84m'
+YELLOW = '\033[38;2;227;199;138m'
+CYAN   = '\033[38;2;121;218;200m'
+VIOLET = '\033[38;2;207;135;232m'
+DIM    = '\033[38;2;128;128;128m'
+WHITE  = '\033[38;2;178;178;178m'
+R      = '\033[0m'
+BOLD   = '\033[1m'
+
+def get_yazi_cwd():
+    try:
+        raw = open('/tmp/bento-cwd').read().strip()
+    except Exception:
+        return None, os.getcwd()
+    if raw.startswith('sftp://'):
+        u = urlparse(raw)
+        return u.hostname, (u.path.replace('//', '/') or '/')
+    if os.path.isdir(raw):
+        return None, raw
+    return None, os.getcwd()
+
+def git_batch_local(cwd):
+    sep = '---SEP---'
+    script = f'''
+cd {shlex.quote(cwd)} 2>/dev/null || exit 1
+git rev-parse --show-toplevel
+echo '{sep}'
+git branch --show-current
+echo '{sep}'
+git rev-list --left-right --count HEAD...@{{u}} 2>/dev/null
+echo '{sep}'
+git status --porcelain -b
+echo '{sep}'
+git log --oneline -3 --format="%h|%cr|%s"
+'''
+    try:
+        r = subprocess.run(['sh', '-c', script], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0 and not r.stdout.strip():
+            return None
+        parts = [p.strip() for p in r.stdout.split(sep)]
+        while len(parts) < 5: parts.append('')
+        return {'toplevel': parts[0] or None, 'branch': parts[1] or None,
+                'ahead_behind': parts[2] or None, 'status': parts[3] or None,
+                'log': parts[4] or None}
+    except:
+        return None
+
+def git_batch_remote(host, remote_path):
+    g = 'git -C ' + shlex.quote(remote_path)
+    sep = "echo '---SEP---'"
+    script = (f'{g} rev-parse --show-toplevel; {sep}; {g} branch --show-current; '
+              f'{sep}; {g} rev-list --left-right --count HEAD...@{{u}} 2>/dev/null; '
+              f'{sep}; {g} status --porcelain -b; {sep}; '
+              f'{g} log --oneline -3 --format="%h|%cr|%s"')
+    cmd = ['ssh', '-o', 'ConnectTimeout=3', '-o', 'BatchMode=yes', host, script]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if r.returncode != 0 and not r.stdout.strip():
+            return None
+        parts = [p.strip() for p in r.stdout.split('---SEP---')]
+        while len(parts) < 5: parts.append('')
+        return {'toplevel': parts[0] or None, 'branch': parts[1] or None,
+                'ahead_behind': parts[2] or None, 'status': parts[3] or None,
+                'log': parts[4] or None}
+    except:
+        return None
+
+def fmt_ago(ago):
+    return (ago.replace(' ago','').replace(' seconds','s').replace(' second','s')
+            .replace(' minutes','m').replace(' minute','m')
+            .replace(' hours','h').replace(' hour','h').replace(' days','d')
+            .replace(' day','d').replace(' weeks','w').replace(' week','w')
+            .replace(' months','mo').replace(' month','mo'))
+
+def render(cols, branch, ab, status, log):
+    lines = []
+    lines.append(f' {VIOLET}{branch}{R}')
+
+    staged = modified = untracked = conflicted = 0
+    if status:
+        for line in status.split('\n'):
+            if line.startswith('##') or not line or len(line) < 2: continue
+            x, y = line[0], line[1]
+            if x == 'U' or y == 'U':       conflicted += 1
+            elif x == '?':                  untracked += 1
+            else:
+                if x not in ' ?': staged += 1
+                if y not in ' ?': modified += 1
+
+    parts = []
+    if staged:     parts.append(f'{GREEN}+{staged} staged{R}')
+    if modified:   parts.append(f'{YELLOW}~{modified} modified{R}')
+    if untracked:  parts.append(f'{DIM}?{untracked} untracked{R}')
+    if conflicted: parts.append(f'{RED}!{conflicted} conflict{R}')
+    if ab:
+        try:
+            ahead, behind = ab.split('\t')
+            if int(ahead) > 0:  parts.append(f'{GREEN}\u2191{ahead} ahead{R}')
+            if int(behind) > 0: parts.append(f'{RED}\u2193{behind} behind{R}')
+        except: pass
+
+    maxw = cols - 2
+    status_lines = 0
+    if parts:
+        status_str = ', '.join(parts)
+        plain = re.sub(r'\033\[[0-9;]*m', '', status_str)
+        if len(plain) <= maxw:
+            lines.append(f' {status_str}')
+            status_lines = 1
+        else:
+            line_parts, line_len = [], 0
+            for part in parts:
+                part_plain = re.sub(r'\033\[[0-9;]*m', '', part)
+                sep = ', ' if line_parts else ''
+                if line_len + len(sep) + len(part_plain) > maxw and line_parts:
+                    lines.append(f' {", ".join(line_parts)}')
+                    status_lines += 1
+                    line_parts = [part]
+                    line_len = len(part_plain)
+                else:
+                    line_parts.append(part)
+                    line_len += len(sep) + len(part_plain)
+            if line_parts:
+                lines.append(f' {", ".join(line_parts)}')
+                status_lines += 1
+    else:
+        lines.append(f' {GREEN}clean{R}')
+        status_lines = 1
+
+    max_commits = 3 if status_lines <= 1 else 2
+    lines.append('')
+    if log:
+        for entry in log.split('\n')[:max_commits]:
+            if not entry: continue
+            p = entry.split('|', 2)
+            if len(p) == 3:
+                h, ago, msg = p
+                age = fmt_ago(ago)
+                maxdesc = maxw - len(h) - len(age) - 3
+                desc = msg[:max(maxdesc, 4)]
+                lines.append(f' {YELLOW}{h}{R} {WHITE}{desc}{R} {DIM}{age}{R}')
+    return lines
+
+def main():
+    sys.stdout.write('\033[?1049h\033[?25l')
+    sys.stdout.flush()
+
+    while True:
+        try:    cols = os.get_terminal_size().columns
+        except: cols = 30
+
+        host, cwd = get_yazi_cwd()
+        lines = ['\033[H\033[J']
+
+        if host:
+            data = git_batch_remote(host, cwd)
+            if data is None:
+                lines.append(f' {RED}{host} \u2717{R}')
+            elif not data['toplevel']:
+                lines.append(f' {DIM}no repo{R}')
+            else:
+                lines += render(cols, data['branch'] or 'detached',
+                                data['ahead_behind'], data['status'], data['log'])
+        else:
+            data = git_batch_local(cwd)
+            if data is None or not data['toplevel']:
+                lines.append(f' {DIM}no repo{R}')
+            else:
+                lines += render(cols, data['branch'] or 'detached',
+                                data['ahead_behind'], data['status'], data['log'])
+
+        sys.stdout.write(''.join(l + '\n' for l in lines))
+        sys.stdout.flush()
+        time.sleep(INTERVAL)
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.stdout.write('\033[?25h\033[?1049l')
+        sys.stdout.flush()
+        sys.exit(0)

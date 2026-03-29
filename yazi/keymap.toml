@@ -1,0 +1,10 @@
+# Bento IDE — yazi keymap extensions
+# Add your own SFTP bookmarks here.  Examples:
+#
+#   { on = ["g", "s"], run = "cd sftp://myserver//home/me", desc = "Go to server" }
+#   { on = ["g", "r"], run = "cd ~/remote", desc = "Go to remote mounts" }
+
+[mgr]
+prepend_keymap = [
+  { on = ["g", "h"], run = "cd ~", desc = "Go home" },
+]

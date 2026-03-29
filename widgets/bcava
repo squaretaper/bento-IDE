@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""bcava — braille dot-matrix audio visualizer for bento IDE.
+
+Launches cava in raw 8-bit mode and renders stereo bar heights
+as a braille dot-matrix.  If cava is not found, shows a
+placeholder message.
+"""
+
+import subprocess, os, sys, tempfile, shutil
+
+BLUE = '\033[38;2;128;160;255m'
+DIM  = '\033[38;2;128;128;128m'
+R    = '\033[0m'
+
+DOT_L = [0x40, 0x04, 0x02, 0x01]  # bottom to top
+DOT_R = [0x80, 0x20, 0x10, 0x08]
+
+CAVA_BIN = os.environ.get('BENTO_CAVA_BIN', 'cava')
+
+def render(bar_vals, cols, rows):
+    dots_high = rows * 4
+    usable = cols - 2
+
+    out = ''
+    for row in range(rows):
+        row_bottom_dot = (rows - 1 - row) * 4
+        line = ''
+        for i in range(0, min(len(bar_vals) - 1, usable * 2), 2):
+            l_height = int(bar_vals[i] / 255 * dots_high)
+            r_height = int(bar_vals[i + 1] / 255 * dots_high)
+            code = 0x2800
+            for d in range(4):
+                dot_idx = row_bottom_dot + d
+                if dot_idx < l_height: code |= DOT_L[d]
+                if dot_idx < r_height: code |= DOT_R[d]
+            line += chr(code)
+        out += f'\033[{row + 1};1H{BLUE} {line}{R}'
+    return out
+
+def main():
+    sys.stdout.write('\033[?1049h\033[?25l\033[2J')
+    sys.stdout.flush()
+
+    # Check if cava is available
+    cava_path = shutil.which(CAVA_BIN)
+    if not cava_path:
+        sys.stdout.write(f'\033[H {BLUE}cava{R} {DIM}not found{R}\n')
+        sys.stdout.write(f' {DIM}install: sudo apt install cava{R}\n')
+        sys.stdout.flush()
+        try:
+            while True: import time; time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+        return
+
+    try:    cols = os.get_terminal_size().columns; rows = os.get_terminal_size().lines
+    except: cols, rows = 30, 8
+
+    n_bars = (cols - 2) * 2
+
+    cfg = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+    cfg.write(f"""[general]
+bars = {n_bars}
+framerate = 30
+[output]
+method = raw
+raw_target = /dev/stdout
+bit_format = 8bit
+channels = stereo
+[smoothing]
+noise_reduction = 50
+""")
+    cfg.flush()
+
+    proc = subprocess.Popen(
+        [cava_path, '-p', cfg.name],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+
+    try:
+        while True:
+            data = proc.stdout.read(n_bars)
+            if not data or len(data) < n_bars:
+                break
+            try:
+                cols = os.get_terminal_size().columns
+                rows = os.get_terminal_size().lines
+            except: pass
+            sys.stdout.write(render(list(data), cols, rows))
+            sys.stdout.flush()
+    finally:
+        proc.terminate()
+        os.unlink(cfg.name)
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.stdout.write('\033[?25h\033[?1049l')
+        sys.stdout.flush()
+        sys.exit(0)

@@ -1,0 +1,55 @@
+#!/bin/bash
+# Bento IDE — opens a file from yazi in the editor pane.
+# Handles both local files and yazi's SFTP cache transparently.
+target="$1"
+
+# Detect yazi SFTP cache path: /tmp/yazi-<uid>/sftp-<host>/<remote_path>
+if [[ "$target" =~ ^/tmp/yazi-[0-9]+/sftp-([^/]+)/(.+)$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    remote_path="/${BASH_REMATCH[2]}"
+    file="$target"
+
+    # Download from remote
+    mkdir -p "$(dirname "$file")"
+    scp -o ConnectTimeout=3 "${host}:${remote_path}" "$file" 2>/dev/null || exit 1
+
+    # Background watcher: sync saves back to remote
+    (
+        prev="$(md5sum "$file" 2>/dev/null)"
+        while [ -f "$file" ]; do
+            sleep 2
+            curr="$(md5sum "$file" 2>/dev/null)"
+            if [ "$curr" != "$prev" ]; then
+                scp -o ConnectTimeout=3 "$file" "${host}:${remote_path}" 2>/dev/null
+                prev="$curr"
+            fi
+        done
+    ) &
+else
+    file="$(realpath "$target" 2>/dev/null || echo "$target")"
+
+    # Write current directory for bgit — skip VFS temp files
+    case "$file" in
+        /tmp/yazi-*)
+            ;;
+        *)
+            dirname "$file" > /tmp/bento-cwd
+            ;;
+    esac
+fi
+
+# Directories — nothing to open
+if [ -d "$target" ]; then
+    exit 0
+fi
+
+# Send file to micro in the next zellij pane
+zellij action focus-next-pane
+sleep 0.05
+zellij action write 5          # Ctrl+E — micro command bar
+sleep 0.05
+zellij action write-chars "tab $file"
+sleep 0.05
+zellij action write 13         # Enter — execute
+sleep 0.05
+zellij action focus-previous-pane

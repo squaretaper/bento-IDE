@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""smon — remote machine resource monitor for bento IDE.
+
+Polls a Glances REST API and renders CPU, memory, and disk I/O
+with braille sparkline graphs.  Configure the remote host in
+bento.conf or via environment variables.
+"""
+
+import json, time, os, sys
+from collections import deque
+from urllib.request import urlopen
+from urllib.error import URLError
+
+# ── Config (from bento.conf via env, or defaults) ────────────────
+REMOTE_HOST  = os.environ.get('BENTO_REMOTE_HOST', '')
+REMOTE_PORT  = os.environ.get('BENTO_REMOTE_PORT', '61208')
+REMOTE_LABEL = os.environ.get('BENTO_REMOTE_LABEL', '') or REMOTE_HOST or 'remote'
+INTERVAL     = int(os.environ.get('BENTO_SMON_INTERVAL', '3'))
+API_BASE     = os.environ.get('BENTO_REMOTE_API', '')
+
+if not API_BASE and REMOTE_HOST:
+    API_BASE = f'http://{REMOTE_HOST}:{REMOTE_PORT}/api/4'
+
+# ── Colors (moonfly) ─────────────────────────────────────────────
+BLUE   = '\033[38;2;128;160;255m'
+GREEN  = '\033[38;2;140;200;95m'
+YELLOW = '\033[38;2;227;199;138m'
+RED    = '\033[38;2;255;84;84m'
+DIM    = '\033[38;2;128;128;128m'
+WHITE  = '\033[38;2;178;178;178m'
+R      = '\033[0m'
+
+def fmt_rate(mb):
+    if mb >= 1024: return f'{mb/1024:.0f}GB'
+    if mb >= 1:    return f'{mb:.0f}MB'
+    return f'{mb*1024:.0f}KB'
+
+def spark(history, width, max_val=100):
+    data = list(history)[-(width * 2):]
+    while len(data) < width * 2:
+        data.insert(0, 0)
+    if len(data) % 2:
+        data.insert(0, 0)
+
+    left_dots  = [0x01, 0x02, 0x04, 0x40]
+    right_dots = [0x08, 0x10, 0x20, 0x80]
+
+    out = []
+    for i in range(0, len(data), 2):
+        l_level = 1 + int(data[i] / max_val * 3) if max_val > 0 else 1
+        r_level = 1 + int(data[i+1] / max_val * 3) if max_val > 0 else 1
+        l_level = max(1, min(l_level, 4))
+        r_level = max(1, min(r_level, 4))
+        code = 0x2800
+        for d in range(l_level): code |= left_dots[d]
+        for d in range(r_level): code |= right_dots[d]
+        out.append(chr(code))
+    if len(out) > width: out = out[-width:]
+    while len(out) < width: out.insert(0, '\u2800')
+    return ''.join(out)
+
+def color_val(val, low=60, high=85):
+    if val < low:  return GREEN
+    if val < high: return YELLOW
+    return RED
+
+def api_get(endpoint):
+    try:
+        with urlopen(f'{API_BASE}/{endpoint}', timeout=3) as r:
+            return json.loads(r.read())
+    except:
+        return None
+
+def poll():
+    cpu    = api_get('cpu')
+    mem    = api_get('mem')
+    diskio = api_get('diskio')
+    if not cpu or not mem:
+        return None
+
+    io_read = io_write = 0
+    if diskio:
+        for disk in diskio:
+            io_read  += disk.get('read_bytes_rate_per_sec', 0)
+            io_write += disk.get('write_bytes_rate_per_sec', 0)
+
+    return {
+        'cpu': cpu.get('total', 0),
+        'mem_used':  mem.get('used', 0) / (1024 ** 3),
+        'mem_total': mem.get('total', 0) / (1024 ** 3),
+        'mem_pct':   mem.get('percent', 0),
+        'io_read_mbs':  io_read / (1024 * 1024),
+        'io_write_mbs': io_write / (1024 * 1024),
+    }
+
+def main():
+    if not API_BASE:
+        sys.stdout.write('\033[?1049h\033[H\033[J')
+        sys.stdout.write(f' {BLUE}smon{R} {DIM}no remote configured{R}\n')
+        sys.stdout.write(f' {DIM}set BENTO_REMOTE_HOST in bento.conf{R}\n')
+        sys.stdout.flush()
+        # Sleep forever — zellij will kill us when the session ends
+        try:
+            while True: time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+        return
+
+    sys.stdout.write('\033[?1049h')
+    sys.stdout.flush()
+
+    cpu_hist = deque(maxlen=60)
+    mem_hist = deque(maxlen=60)
+    io_hist  = deque(maxlen=60)
+
+    while True:
+        try:    cols = os.get_terminal_size().columns
+        except: cols = 30
+        gw = max(cols - 2, 8)
+
+        lines = ['\033[H\033[J']
+        data = poll()
+
+        if not data:
+            lines.append(f' {BLUE}{REMOTE_LABEL}{R} {DIM}offline{R}')
+            sys.stdout.write(''.join(l + '\n' for l in lines))
+            sys.stdout.flush()
+            time.sleep(5)
+            continue
+
+        # CPU
+        cpu = data['cpu']
+        cpu_hist.append(cpu)
+        c = color_val(cpu)
+        lines.append(f' {BLUE}cpu{R} {c}{cpu:.1f}%{R}')
+        lines.append(f' {c}{spark(cpu_hist, gw)}{R}')
+        lines.append('')
+
+        # Memory
+        mu, mt, mp = data['mem_used'], data['mem_total'], data['mem_pct']
+        mem_hist.append(mp)
+        c = color_val(mp)
+        lines.append(f' {BLUE}mem{R} {c}{mu:.0f}{DIM}/{mt:.0f}GB{R}')
+        lines.append(f' {c}{spark(mem_hist, gw)}{R}')
+        lines.append('')
+
+        # Disk I/O
+        ir, iw = data['io_read_mbs'], data['io_write_mbs']
+        io_hist.append(ir + iw)
+        lines.append(f' {BLUE}i/o{R} {DIM}\u2193{R}{WHITE}{fmt_rate(ir)}{R} {DIM}\u2191{R}{WHITE}{fmt_rate(iw)}/s{R}')
+        lines.append(f' {DIM}{spark(io_hist, gw, 7000)}{R}')
+
+        sys.stdout.write(''.join(l + '\n' for l in lines))
+        sys.stdout.flush()
+        time.sleep(INTERVAL)
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.stdout.write('\033[?1049l')
+        sys.stdout.flush()
+        sys.exit(0)

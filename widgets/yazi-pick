@@ -1,0 +1,7 @@
+#!/bin/bash
+# Bento IDE — yazi launcher with bento-aware editor bridge.
+# Uses a dedicated yazi config so it doesn't interfere with the
+# user's normal yazi setup.
+export EDITOR="yazi-open"
+export YAZI_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/yazi-bento"
+exec yazi --cwd-file=/tmp/yazi-cwd "$@"
