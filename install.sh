@@ -7,7 +7,7 @@ set -euo pipefail
 BENTO_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="${HOME}/.local/bin"
 YAZI_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/yazi-bento"
-ZELLIJ_THEME_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/zellij/themes"
+
 
 echo "bento IDE installer"
 echo "==================="
@@ -47,7 +47,6 @@ fi
 
 # ── Create directories ────────────────────────────────────────────
 mkdir -p "$BIN_DIR"
-mkdir -p "$ZELLIJ_THEME_DIR"
 
 # ── Symlink launcher ─────────────────────────────────────────────
 ln -sf "${BENTO_DIR}/bento" "${BIN_DIR}/bento"
@@ -59,10 +58,6 @@ for script in bmon smon bgit bcava yazi-open yazi-pick; do
     ln -sf "${BENTO_DIR}/widgets/${script}" "${BIN_DIR}/${script}"
     echo "  ✓ ${BIN_DIR}/${script}"
 done
-
-# ── Symlink moonfly theme ─────────────────────────────────────────
-ln -sf "${BENTO_DIR}/config/themes/moonfly.kdl" "${ZELLIJ_THEME_DIR}/moonfly.kdl"
-echo "  ✓ ${ZELLIJ_THEME_DIR}/moonfly.kdl"
 
 # ── Install yazi config (bento-specific) ──────────────────────────
 # Uses a separate yazi config dir so it doesn't stomp the user's

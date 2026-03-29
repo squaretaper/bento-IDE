@@ -73,9 +73,9 @@ def fmt_rate(val, unit='B'):
     return f'{val:.0f}K{unit}'
 
 def color_val(val, low=60, high=85):
-    GREEN  = '\033[38;2;140;200;95m'
-    YELLOW = '\033[38;2;227;199;138m'
-    RED    = '\033[38;2;255;84;84m'
+    GREEN  = '\033[32m'
+    YELLOW = '\033[33m'
+    RED    = '\033[31m'
     if val < low:  return GREEN
     if val < high: return YELLOW
     return RED
@@ -111,9 +111,10 @@ def main():
     sys.stdout.write('\033[?1049h')
     sys.stdout.flush()
 
-    BLUE  = '\033[38;2;128;160;255m'
-    DIM   = '\033[38;2;128;128;128m'
-    WHITE = '\033[38;2;178;178;178m'
+    # Standard ANSI colors — adapts to the user's terminal palette.
+    BLUE  = '\033[34m'
+    DIM   = '\033[2m'
+    WHITE = '\033[37m'
     R     = '\033[0m'
 
     cpu_hist  = deque(maxlen=60)
@@ -194,8 +195,8 @@ def main():
             i += 1
         temps.sort(key=lambda x: -x[1])
 
-        GRAY   = '\033[38;2;140;140;140m'
-        DKGRAY = '\033[38;2;50;50;50m'
+        GRAY   = '\033[37m'
+        DKGRAY = '\033[2;37m'
         lines.append(f' {BLUE}temp{R}')
         for name, t in temps[:4]:
             c = color_val(t, 55, 75)

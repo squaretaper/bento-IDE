@@ -8,8 +8,9 @@ placeholder message.
 
 import subprocess, os, sys, tempfile, shutil
 
-BLUE = '\033[38;2;128;160;255m'
-DIM  = '\033[38;2;128;128;128m'
+# Standard ANSI colors — adapts to the user's terminal palette.
+BLUE = '\033[34m'
+DIM  = '\033[2m'
 R    = '\033[0m'
 
 DOT_L = [0x40, 0x04, 0x02, 0x01]  # bottom to top

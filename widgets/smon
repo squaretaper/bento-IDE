@@ -21,13 +21,14 @@ API_BASE     = os.environ.get('BENTO_REMOTE_API', '')
 if not API_BASE and REMOTE_HOST:
     API_BASE = f'http://{REMOTE_HOST}:{REMOTE_PORT}/api/4'
 
-# ── Colors (moonfly) ─────────────────────────────────────────────
-BLUE   = '\033[38;2;128;160;255m'
-GREEN  = '\033[38;2;140;200;95m'
-YELLOW = '\033[38;2;227;199;138m'
-RED    = '\033[38;2;255;84;84m'
-DIM    = '\033[38;2;128;128;128m'
-WHITE  = '\033[38;2;178;178;178m'
+# ── Colors ────────────────────────────────────────────────────────
+# Standard ANSI colors — adapts to the user's terminal palette.
+BLUE   = '\033[34m'
+GREEN  = '\033[32m'
+YELLOW = '\033[33m'
+RED    = '\033[31m'
+DIM    = '\033[2m'
+WHITE  = '\033[37m'
 R      = '\033[0m'
 
 def fmt_rate(mb):

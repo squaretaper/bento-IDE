@@ -187,7 +187,7 @@ BENTO_BGIT_INTERVAL=3    # git status poll
 BENTO_EDITOR=micro       # editor command
 BENTO_CAVA_BIN=cava      # path to cava binary
 BENTO_SESSION=bento      # zellij session name
-BENTO_THEME=moonfly      # zellij theme
+# BENTO_THEME=            # zellij theme (empty = zellij default)
 BENTO_MIN_COLS=100       # minimum terminal width before warning
 ```
 
@@ -233,12 +233,13 @@ Full vim-style zellij keybinds (clear-defaults).  Key modes:
 | `Alt-H/J/K/L` | Quick focus — move between panes (always active) |
 
 
-## Moonfly theme
+## Theming
 
-Bento ships with the [moonfly](https://github.com/bluz71/vim-moonfly-colors)
-color scheme.  Background `#080808`, foreground `#b2b2b2`, accent
-blue `#80a0ff`.  The widget scripts use matching RGB ANSI escapes
-for a cohesive look.
+Bento doesn't ship a theme.  The widget scripts use standard ANSI
+16-color escapes, so they automatically match whatever terminal
+palette you're using.  Set your preferred zellij theme by
+uncommenting `theme "..."` in `config/zellij.kdl` or setting
+`BENTO_THEME` in `bento.conf`.
 
 
 ## License

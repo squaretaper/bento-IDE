@@ -280,11 +280,13 @@ load_plugins {
 }
 
 simplified_ui true
-theme "moonfly"
 
-// The bento launcher sets ZELLIJ_CONFIG_FILE to this file.
-// Zellij looks for themes/ relative to the config file's directory,
-// so config/themes/moonfly.kdl is found automatically.
+// Theme — uses whatever theme you have installed in your zellij
+// themes directory (~/.config/zellij/themes/).  Comment this out
+// or change it to match your setup.  Zellij ships with several
+// built-in themes; run `zellij setup --list-themes` to see them.
+//
+// theme "moonfly"
 default_mode "normal"
 pane_frames true
 session_name "bento"

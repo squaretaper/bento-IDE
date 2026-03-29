@@ -22,7 +22,7 @@ fi
 # ── Defaults ──────────────────────────────────────────────────────
 BENTO_SESSION="${BENTO_SESSION:-bento}"
 BENTO_MIN_COLS="${BENTO_MIN_COLS:-100}"
-BENTO_THEME="${BENTO_THEME:-moonfly}"
+BENTO_THEME="${BENTO_THEME:-}"
 
 # ── Export config for widget scripts ──────────────────────────────
 export BENTO_REMOTE_HOST="${BENTO_REMOTE_HOST:-}"

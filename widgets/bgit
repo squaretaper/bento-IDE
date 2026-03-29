@@ -11,14 +11,15 @@ from urllib.parse import urlparse
 
 INTERVAL = int(os.environ.get('BENTO_BGIT_INTERVAL', '3'))
 
-BLUE   = '\033[38;2;128;160;255m'
-GREEN  = '\033[38;2;140;200;95m'
-RED    = '\033[38;2;255;84;84m'
-YELLOW = '\033[38;2;227;199;138m'
-CYAN   = '\033[38;2;121;218;200m'
-VIOLET = '\033[38;2;207;135;232m'
-DIM    = '\033[38;2;128;128;128m'
-WHITE  = '\033[38;2;178;178;178m'
+# Standard ANSI colors — adapts to the user's terminal palette.
+BLUE   = '\033[34m'
+GREEN  = '\033[32m'
+RED    = '\033[31m'
+YELLOW = '\033[33m'
+CYAN   = '\033[36m'
+VIOLET = '\033[35m'
+DIM    = '\033[2m'
+WHITE  = '\033[37m'
 R      = '\033[0m'
 BOLD   = '\033[1m'
 
