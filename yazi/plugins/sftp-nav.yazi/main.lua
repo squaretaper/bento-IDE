@@ -1,8 +1,10 @@
 local home = os.getenv("HOME") or ""
 local remote_dir = home .. "/remote"
 
+-- Map server stub names (~/remote/<name>/) to their home directories.
+-- Add your own servers here:
+--   myserver = "/home/myuser",
 local server_homes = {
-	studio = "/Users/joshua",
 }
 
 -- Sync: override for l/Right — directory entry only

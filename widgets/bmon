@@ -5,10 +5,14 @@ Renders CPU, memory, disk I/O, temperatures, and network with
 braille sparkline graphs.  Reads /proc and /sys on Linux.
 """
 
-import time, os, sys
+import time, os, sys, re
 from collections import deque
 
-INTERVAL = int(os.environ.get('BENTO_BMON_INTERVAL', '2'))
+INTERVAL  = int(os.environ.get('BENTO_BMON_INTERVAL', '2'))
+CPU_WARN  = int(os.environ.get('BENTO_CPU_WARN', '60'))
+CPU_CRIT  = int(os.environ.get('BENTO_CPU_CRIT', '85'))
+TEMP_WARN = int(os.environ.get('BENTO_TEMP_WARN', '55'))
+TEMP_CRIT = int(os.environ.get('BENTO_TEMP_CRIT', '75'))
 
 def read_file(path):
     try:
@@ -72,7 +76,7 @@ def fmt_rate(val, unit='B'):
     if val >= 1024:    return f'{val/1024:.0f}M{unit}'
     return f'{val:.0f}K{unit}'
 
-def color_val(val, low=60, high=85):
+def color_val(val, low=CPU_WARN, high=CPU_CRIT):
     GREEN  = '\033[32m'
     YELLOW = '\033[33m'
     RED    = '\033[31m'
@@ -94,13 +98,15 @@ def get_net_interfaces():
     return sorted(ifaces)
 
 def get_disk_devices():
+    """Auto-detect whole-disk block devices from /proc/diskstats."""
     devs = []
     try:
         with open('/proc/diskstats') as f:
             for line in f:
                 p = line.split()
                 name = p[2]
-                if name in ('nvme0n1', 'sda', 'sdb', 'vda'):
+                # Match whole disks: nvme*n*, sd*, vd*, mmcblk* (skip partitions)
+                if re.match(r'^(nvme\d+n\d+|[sv]d[a-z]+|mmcblk\d+)$', name):
                     devs.append((name, int(p[5]), int(p[9])))
     except: pass
     return devs
@@ -180,7 +186,8 @@ def main():
             prev_disk[name] = (rd, wr)
         disk_hist.append(rd_total + wr_total)
         lines.append(f' {BLUE}i/o{R} {DIM}\u2193{R}{WHITE}{fmt_rate(rd_total)}{R} {DIM}\u2191{R}{WHITE}{fmt_rate(wr_total)}/s{R}')
-        lines.append(f' {DIM}{spark(disk_hist, gw, 2200000)}{R}')
+        disk_peak = max(max(disk_hist), 1024)  # auto-scale, floor 1 MB
+        lines.append(f' {DIM}{spark(disk_hist, gw, disk_peak)}{R}')
         lines.append('')
 
         # ── Temps ──
@@ -199,7 +206,7 @@ def main():
         DKGRAY = '\033[2;37m'
         lines.append(f' {BLUE}temp{R}')
         for name, t in temps[:4]:
-            c = color_val(t, 55, 75)
+            c = color_val(t, TEMP_WARN, TEMP_CRIT)
             prefix = f' {name[:6]:<6} {t:2d}\u00b0 '
             tw = max(cols - len(prefix) - 1, 4)
             filled, empty = braille_bar(min(t, 100), tw)

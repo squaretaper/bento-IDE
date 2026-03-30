@@ -60,7 +60,10 @@ def spark(history, width, max_val=100):
     while len(out) < width: out.insert(0, '\u2800')
     return ''.join(out)
 
-def color_val(val, low=60, high=85):
+CPU_WARN = int(os.environ.get('BENTO_CPU_WARN', '60'))
+CPU_CRIT = int(os.environ.get('BENTO_CPU_CRIT', '85'))
+
+def color_val(val, low=CPU_WARN, high=CPU_CRIT):
     if val < low:  return GREEN
     if val < high: return YELLOW
     return RED
@@ -149,7 +152,8 @@ def main():
         ir, iw = data['io_read_mbs'], data['io_write_mbs']
         io_hist.append(ir + iw)
         lines.append(f' {BLUE}i/o{R} {DIM}\u2193{R}{WHITE}{fmt_rate(ir)}{R} {DIM}\u2191{R}{WHITE}{fmt_rate(iw)}/s{R}')
-        lines.append(f' {DIM}{spark(io_hist, gw, 7000)}{R}')
+        io_peak = max(max(io_hist), 1)  # auto-scale
+        lines.append(f' {DIM}{spark(io_hist, gw, io_peak)}{R}')
 
         sys.stdout.write(''.join(l + '\n' for l in lines))
         sys.stdout.flush()
